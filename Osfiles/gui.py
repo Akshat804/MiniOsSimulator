@@ -9,10 +9,21 @@ import networkx as nx
 
 # ✅ Cross-platform executable
 OS_CMD = ["os.exe"] if sys.platform.startswith("win") else ["./os"]
-
+last_wt = None
+last_algo = ""
 # ================= RUN OS =================
 def run_os():
     command = input_box.get("1.0", tk.END)
+    global last_wt, last_algo
+
+    last_wt = avg_wt
+    if "schedule fcfs" in command:
+        last_algo = "FCFS"
+    elif "schedule rr" in command:
+        last_algo = "RR"
+    elif "schedule mlfq" in command:
+        last_algo = "MLFQ"
+    
 
     process = subprocess.Popen(
         OS_CMD,
@@ -47,14 +58,18 @@ def parse_metrics(output):
 
 
 def show_graph():
-    if avg_wt is None:
+    if last_wt is None:
         result_box.insert(tk.END, "\n❌ Run scheduling first\n")
         return
 
-    plt.bar(["Waiting", "Turnaround"], [avg_wt, avg_tat])
-    plt.title("Performance Metrics")
-    plt.show()
+    values = [last_wt, last_wt, last_wt]
 
+    plt.bar(["FCFS", "RR", "MLFQ"], values)
+
+    plt.title(f"{last_algo} Result Shown Across All")
+    plt.ylabel("Average Waiting Time")
+
+    plt.show()
 
 # ================= COMPARE =================
 def compare_algorithms():
@@ -64,39 +79,51 @@ def compare_algorithms():
         result_box.insert(tk.END, "\n❌ Enter processes first\n")
         return
 
+    # 🔥 REMOVE any existing schedule lines
+    lines = base_input.split("\n")
+    clean_input = "\n".join([line for line in lines if "schedule" not in line.lower()])
+
     algos = ["fcfs", "rr 2", "mlfq"]
     results = []
 
     for algo in algos:
-        cmd = base_input + f"\nschedule {algo}\n"
+        cmd = clean_input + f"\nschedule {algo}\n"
 
         process = subprocess.Popen(
             OS_CMD,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True
         )
 
         output, _ = process.communicate(cmd + "exit\n")
 
-        match = re.search(r'Average Waiting Time = ([\d\.]+)', output)
+        match = re.search(r'Average Waiting Time\s*=\s*([\d\.]+)', output)
 
-        results.append(float(match.group(1)) if match else 0)
+        if match:
+            results.append(float(match.group(1)))
+        else:
+            results.append(0)
+
+    print("Results:", results)
 
     plt.bar(["FCFS", "RR", "MLFQ"], results)
     plt.title("Algorithm Comparison")
+    plt.ylabel("Average Waiting Time")
     plt.show()
-
-
-# ================= GANTT =================
+# ================= GANTT EXTRACTION =================
 def extract_gantt(output):
-    match = re.search(r'Gantt Chart:\n(.+)', output, re.DOTALL)
-    if not match:
-        return []
+    lines = output.split("\n")
 
-    return re.findall(r'P\d+', match.group(1))
+    for line in lines:
+        if "|" in line and "P" in line:
+            return re.findall(r'P\d+', line)
+
+    return []
 
 
+# ================= GANTT ANIMATION =================
 def animate_gantt():
     command = input_box.get("1.0", tk.END)
 
@@ -117,9 +144,8 @@ def animate_gantt():
 
     fig, ax = plt.subplots()
 
-    # 🔥 assign unique colors
     colors = {}
-    color_list = ["red", "blue", "green", "orange", "purple"]
+    color_list = ["red", "blue", "green", "orange", "purple", "cyan"]
 
     def get_color(p):
         if p not in colors:
@@ -137,11 +163,17 @@ def animate_gantt():
             ax.barh(0, 1, left=i, color=color)
             ax.text(i + 0.3, 0, gantt[i], color="white")
 
-    animation.FuncAnimation(fig, update, frames=len(gantt)+1, interval=500)
-    plt.title("Gantt Animation")
+    # ✅ FIX: store animation object
+    global gantt_animation
+    gantt_animation = animation.FuncAnimation(
+        fig,
+        update,
+        frames=len(gantt) + 1,
+        interval=500,
+        repeat=False
+    )
+
     plt.show()
-
-
 # ================= MEMORY =================
 def extract_memory(output):
     frames_list = []
@@ -195,6 +227,7 @@ def animate_memory():
 
     total_frames = min(len(frames), len(status_list), len(replaced_list))
 
+    # ✅ FIX: keep update INSIDE function
     def update(i):
         ax.clear()
 
@@ -202,7 +235,12 @@ def animate_memory():
         status = status_list[i]
         replaced = replaced_list[i]
 
-        ax.set_title(f"Step {i+1} - {status}")
+        # 🔥 Title color
+        if status == "HIT":
+            ax.set_title(f"Step {i+1} - HIT", color="green")
+        else:
+            ax.set_title(f"Step {i+1} - FAULT", color="red")
+
         ax.set_xlim(0, len(frame))
         ax.set_ylim(0, 1)
         ax.set_xticks([])
@@ -213,21 +251,32 @@ def animate_memory():
             if val == "-":
                 color = "lightgray"
 
+            # 🔴 replaced page
             elif replaced is not None and str(val) == str(replaced):
                 color = "red"
 
+            # 🟢 HIT → green frame
+            elif status == "HIT":
+                color = "lightgreen"
+
+            # 🔵 FAULT → blue
             else:
                 color = "skyblue"
 
             ax.barh(0, 1, left=j, color=color)
             ax.text(j + 0.4, 0, val, ha='center')
 
-    ani = animation.FuncAnimation(
-        fig, update, frames=total_frames, interval=800, repeat=False
+    # ✅ FIX: store animation object
+    global memory_animation
+    memory_animation = animation.FuncAnimation(
+        fig,
+        update,
+        frames=total_frames,
+        interval=800,
+        repeat=False
     )
 
     plt.show()
-
 def visualize_deadlock():
     text = input_box.get("1.0", tk.END)
 

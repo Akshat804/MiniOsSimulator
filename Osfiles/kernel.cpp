@@ -18,6 +18,14 @@ void Kernel::addProcess(int pid, int at, int bt) {
 void Kernel::runFCFS() {
     int completed = 0;
     int n = processes.size();
+    for (auto &p : processes) {
+    p.remainingTime = p.burstTime;
+    p.state = READY;
+    p.inQueue = false;
+    p.completionTime = 0;
+    p.turnaroundTime = 0;
+    p.waitingTime = 0;
+}
 
     queue<PCB*> readyQueue;
     int time = 0;
@@ -257,7 +265,14 @@ cout << "CPU Utilization = " << cpuUtil << "%\n";
 }
 void Kernel::runMLFQ() {
     int time = 0, completed = 0, n = processes.size();
-
+for (auto &p : processes) {
+    p.remainingTime = p.burstTime;
+    p.state = READY;
+    p.inQueue = false;
+    p.completionTime = 0;
+    p.turnaroundTime = 0;
+    p.waitingTime = 0;
+}
     queue<PCB*> Q0, Q1, Q2;
     PCB* current = nullptr;
 
